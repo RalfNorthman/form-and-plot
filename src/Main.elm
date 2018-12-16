@@ -6,7 +6,7 @@ import Browser exposing (sandbox)
 import Element.Background as Background
 import Element.Border as Border
 import Element.Font as Font
-import Element.Input exposing (button)
+import Element.Input as Input
 import Html exposing (Html)
 
 
@@ -14,12 +14,15 @@ import Html exposing (Html)
 
 
 type alias Model =
-    {}
+    { temperature : String
+    , humidity : String
+    , pressure : String
+    }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( {}, Cmd.none )
+    ( Model "" "" "", Cmd.none )
 
 
 
@@ -27,16 +30,29 @@ init =
 
 
 type Msg
-    = NoOp
+    = InputTemp String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    ( model, Cmd.none )
+    case msg of
+        InputTemp str ->
+            ( { model | temperature = str }, Cmd.none )
 
 
 
 ---- VIEW ----
+
+
+inputField : String -> String -> (String -> msg) -> Element msg
+inputField modelPart label msg =
+    Input.text
+        [ width <| px 300 ]
+        { onChange = (\x -> msg x)
+        , text = modelPart
+        , placeholder = Nothing
+        , label = Input.labelAbove [ alignLeft ] <| text label
+        }
 
 
 view : Model -> Html Msg
@@ -52,8 +68,14 @@ view model =
         }
         []
     <|
-        el [] <|
-            text "Your Elm App is working!"
+        column
+            [ spacing 10
+            , padding 10
+            ]
+            [ text "Your Elm App is working!"
+            , inputField model.temperature "Temperature [°C]" InputTemp
+            , text model.temperature
+            ]
 
 
 
