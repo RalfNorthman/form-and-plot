@@ -43,6 +43,11 @@ type HumidityError
     | HumidityBoundError
 
 
+type PressureError
+    = PressureNotNumberError
+    | PressureBelowZeroError
+
+
 temperatureValidator : Validator (Maybe Float) TemperatureError
 temperatureValidator =
     required TemperatureNotNumberError <|
@@ -58,9 +63,16 @@ humidityValidator =
             ]
 
 
+pressureValidator : Validator (Maybe Float) PressureError
+pressureValidator =
+    required PressureNotNumberError <|
+        minBound PressureBelowZeroError 0
+
+
 type FormError
     = TemperatureError TemperatureError
     | HumidityError HumidityError
+    | PressureError PressureError
 
 
 formValidator : Validator Model FormError
@@ -68,6 +80,7 @@ formValidator =
     concat
         [ liftMap TemperatureError .temperature temperatureValidator
         , liftMap HumidityError .humidity humidityValidator
+        , liftMap PressureError .pressure pressureValidator
         ]
 
 
@@ -90,6 +103,14 @@ displayFormError err =
                 HumidityBoundError ->
                     "Humidity must be between 0 and 100 percent."
 
+        PressureError pressErr ->
+            case pressErr of
+                PressureNotNumberError ->
+                    "Pressure input needs a number."
+
+                PressureBelowZeroError ->
+                    "Pressure must be above zero."
+
 
 
 ---- UPDATE ----
@@ -98,6 +119,7 @@ displayFormError err =
 type Msg
     = InputTemp String
     | InputHumid String
+    | InputPress String
 
 
 commaToFloat : String -> Maybe Float
@@ -126,6 +148,14 @@ update msg model =
             , Cmd.none
             )
 
+        InputPress str ->
+            ( { model
+                | inPress = str
+                , pressure = commaToFloat str
+              }
+            , Cmd.none
+            )
+
 
 
 ---- VIEW ----
@@ -134,7 +164,7 @@ update msg model =
 inputField : String -> String -> (String -> msg) -> Element msg
 inputField modelPart label msg =
     Input.text
-        [ width <| px 300 ]
+        [ width <| px 200 ]
         { onChange = (\x -> msg x)
         , text = modelPart
         , placeholder = Nothing
@@ -142,12 +172,25 @@ inputField modelPart label msg =
         }
 
 
-errorOut model =
+errorList : Model -> List String
+errorList model =
     List.map displayFormError <| errors formValidator model
 
 
-view : Model -> Html Msg
-view model =
+displayErrors : Model -> Element msg
+displayErrors model =
+    column
+        [ Font.color <| rgb 0.8 0.1 0.1
+        , Font.alignLeft
+        , spacing 5
+        ]
+    <|
+        List.map text <|
+            errorList model
+
+
+myLayout : Element msg -> Html msg
+myLayout element =
     layoutWith
         { options =
             [ focusStyle
@@ -158,7 +201,12 @@ view model =
             ]
         }
         []
-    <|
+        element
+
+
+view : Model -> Html Msg
+view model =
+    myLayout <|
         column
             [ spacing 10
             , padding 10
@@ -167,16 +215,8 @@ view model =
             [ text "Your Elm App is working!"
             , inputField model.inTemp "Temperature [°C]" InputTemp
             , inputField model.inHumid "Humidity [%]" InputHumid
-            , column
-                [ Font.color <| rgb 0.8 0.1 0.1
-                , Font.alignLeft
-                , spacing 5
-                ]
-              <|
-                List.map
-                    text
-                <|
-                    errorOut model
+            , inputField model.inPress "Pressure [Pa]" InputPress
+            , displayErrors model
             ]
 
 
