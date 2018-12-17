@@ -100,7 +100,8 @@ type Msg
     | InputHumid String
 
 
-toFloat str =
+commaToFloat : String -> Maybe Float
+commaToFloat str =
     str
         |> String.replace "," "."
         |> String.toFloat
@@ -112,7 +113,7 @@ update msg model =
         InputTemp str ->
             ( { model
                 | inTemp = str
-                , temperature = toFloat str
+                , temperature = commaToFloat str
               }
             , Cmd.none
             )
@@ -120,7 +121,7 @@ update msg model =
         InputHumid str ->
             ( { model
                 | inHumid = str
-                , humidity = toFloat str
+                , humidity = commaToFloat str
               }
             , Cmd.none
             )
