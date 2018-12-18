@@ -21,12 +21,13 @@ type alias Model =
     , inTemp : String
     , inHumid : String
     , inPress : String
+    , recentError : Bool
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( Model Nothing Nothing Nothing "" "" "", Cmd.none )
+    ( Model Nothing Nothing Nothing "" "" "" False, Cmd.none )
 
 
 
@@ -133,6 +134,11 @@ commaToFloat str =
         |> String.toFloat
 
 
+noErrors : Model -> Bool
+noErrors model =
+    errorList model |> List.isEmpty
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -140,6 +146,7 @@ update msg model =
             ( { model
                 | inTemp = str
                 , temperature = commaToFloat str
+                , recentError = False
               }
             , Cmd.none
             )
@@ -148,6 +155,7 @@ update msg model =
             ( { model
                 | inHumid = str
                 , humidity = commaToFloat str
+                , recentError = False
               }
             , Cmd.none
             )
@@ -156,12 +164,20 @@ update msg model =
             ( { model
                 | inPress = str
                 , pressure = commaToFloat str
+                , recentError = False
               }
             , Cmd.none
             )
 
         ClickSubmit ->
-            ( model, Cmd.none )
+            if noErrors model then
+                ( model, Cmd.none )
+            else
+                ( { model
+                    | recentError = True
+                  }
+                , Cmd.none
+                )
 
 
 
@@ -222,21 +238,33 @@ inputField modelPart label msg =
         }
 
 
-errorList : Model -> List String
+errorList : Model -> List FormError
 errorList model =
-    List.map displayFormError <| errors formValidator model
+    errors formValidator model
+
+
+errorStringList : Model -> List String
+errorStringList model =
+    List.map displayFormError <| errorList model
 
 
 displayErrors : Model -> Element msg
 displayErrors model =
-    column
-        [ Font.color dangerRed
-        , Font.alignLeft
-        , spacing 5
-        ]
-    <|
-        List.map text <|
-            errorList model
+    let
+        errorDisplay =
+            column
+                [ Font.color dangerRed
+                , Font.alignLeft
+                , spacing 5
+                ]
+            <|
+                List.map text <|
+                    errorStringList model
+    in
+        if model.recentError then
+            errorDisplay
+        else
+            none
 
 
 myButton : String -> Msg -> Element Msg
