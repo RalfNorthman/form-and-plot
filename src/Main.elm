@@ -45,7 +45,7 @@ type HumidityError
 
 type PressureError
     = PressureNotNumberError
-    | PressureBelowZeroError
+    | PressureBoundError
 
 
 temperatureValidator : Validator (Maybe Float) TemperatureError
@@ -66,7 +66,10 @@ humidityValidator =
 pressureValidator : Validator (Maybe Float) PressureError
 pressureValidator =
     required PressureNotNumberError <|
-        minBound PressureBelowZeroError 0
+        concat
+            [ minBound PressureBoundError 85
+            , maxBound PressureBoundError 110
+            ]
 
 
 type FormError
@@ -108,8 +111,8 @@ displayFormError err =
                 PressureNotNumberError ->
                     "Pressure input needs a number."
 
-                PressureBelowZeroError ->
-                    "Pressure must be above zero."
+                PressureBoundError ->
+                    "Pressure is usually between 85 and 110 kPa."
 
 
 
@@ -120,6 +123,7 @@ type Msg
     = InputTemp String
     | InputHumid String
     | InputPress String
+    | ClickSubmit
 
 
 commaToFloat : String -> Maybe Float
@@ -156,6 +160,52 @@ update msg model =
             , Cmd.none
             )
 
+        ClickSubmit ->
+            ( model, Cmd.none )
+
+
+
+---- COLORS ----
+
+
+dangerRed =
+    rgb 0.8 0.1 0.1
+
+
+makeGrey number =
+    rgb number number number
+
+
+lightGrey =
+    makeGrey 0.9
+
+
+grey =
+    makeGrey 0.8
+
+
+darkGrey =
+    makeGrey 0.7
+
+
+
+---- VIEW  HELPERS ----
+
+
+buttonStyle : List (Attribute Msg)
+buttonStyle =
+    [ Background.color lightGrey
+    , Border.rounded 5
+    , Border.width 2
+    , Border.color darkGrey
+    , mouseDown
+        [ Background.color grey
+        , scale <| 15 / 16
+        ]
+    , mouseOver [ scale <| 16 / 15 ]
+    , padding 10
+    ]
+
 
 
 ---- VIEW ----
@@ -180,13 +230,22 @@ errorList model =
 displayErrors : Model -> Element msg
 displayErrors model =
     column
-        [ Font.color <| rgb 0.8 0.1 0.1
+        [ Font.color dangerRed
         , Font.alignLeft
         , spacing 5
         ]
     <|
         List.map text <|
             errorList model
+
+
+myButton : String -> Msg -> Element Msg
+myButton label msg =
+    Input.button
+        buttonStyle
+        { onPress = Just msg
+        , label = text label
+        }
 
 
 myLayout : Element msg -> Html msg
@@ -215,7 +274,8 @@ view model =
             [ text "Your Elm App is working!"
             , inputField model.inTemp "Temperature [°C]" InputTemp
             , inputField model.inHumid "Humidity [%]" InputHumid
-            , inputField model.inPress "Pressure [Pa]" InputPress
+            , inputField model.inPress "Pressure [kPa]" InputPress
+            , myButton "Submit" ClickSubmit
             , displayErrors model
             ]
 
