@@ -22,49 +22,54 @@ type alias Model =
     , inHumid : String
     , inPress : String
     , recentError : Bool
+    , ignoreWarnings : Bool
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( Model Nothing Nothing Nothing "" "" "" False, Cmd.none )
+    ( Model Nothing Nothing Nothing "" "" "" False False, Cmd.none )
 
 
-type alias Input err =
+type alias Input err warn =
     { accessor : Model -> Maybe Float
     , stringAcc : Model -> String
     , validator : Validator (Maybe Float) err
+    , warner : Validator (Maybe Float) warn
     , label : String
     , msg : String -> Msg
     }
 
 
-temperature : Input TemperatureError
+temperature : Input TemperatureError TemperatureWarning
 temperature =
     Input
         .temperature
         .inTemp
         temperatureValidator
+        temperatureWarner
         "Temperature [°C]"
         InputTemp
 
 
-humidity : Input HumidityError
+humidity : Input HumidityError HumidityWarning
 humidity =
     Input
         .humidity
         .inHumid
         humidityValidator
+        humidityWarner
         "Humidity [%]"
         InputHumid
 
 
-pressure : Input PressureError
+pressure : Input PressureError PressureWarning
 pressure =
     Input
         .pressure
         .inPress
         pressureValidator
+        pressureWarner
         "Pressure [kPa]"
         InputPress
 
@@ -85,7 +90,7 @@ type HumidityError
 
 type PressureError
     = PressureNotNumberError
-    | PressureBoundError
+    | PressureUnderZeroError
 
 
 temperatureValidator : Validator (Maybe Float) TemperatureError
@@ -106,10 +111,7 @@ humidityValidator =
 pressureValidator : Validator (Maybe Float) PressureError
 pressureValidator =
     required PressureNotNumberError <|
-        concat
-            [ minBound PressureBoundError 85
-            , maxBound PressureBoundError 110
-            ]
+        minBound PressureUnderZeroError 0
 
 
 type FormError
@@ -151,8 +153,100 @@ displayFormError err =
                 PressureNotNumberError ->
                     "Pressure input needs a number."
 
-                PressureBoundError ->
-                    "Pressure is usually between 85 and 110 kPa."
+                PressureUnderZeroError ->
+                    "Pressure must be above zero."
+
+
+errorList : Model -> List FormError
+errorList model =
+    errors formValidator model
+
+
+errorStringList : Model -> List String
+errorStringList model =
+    List.map displayFormError <| errorList model
+
+
+noErrors : Model -> Bool
+noErrors model =
+    errorList model |> List.isEmpty
+
+
+
+---- WARN ----
+
+
+type TemperatureWarning
+    = TemperatureBoundWarning
+
+
+type HumidityWarning
+    = None
+
+
+type PressureWarning
+    = PressureBoundWarning
+
+
+temperatureWarner : Validator (Maybe Float) TemperatureWarning
+temperatureWarner =
+    optional <|
+        concat
+            [ minBound TemperatureBoundWarning -95
+            , maxBound TemperatureBoundWarning 65
+            ]
+
+
+humidityWarner : Validator (Maybe Float) HumidityWarning
+humidityWarner =
+    succeed
+
+
+pressureWarner : Validator (Maybe Float) PressureWarning
+pressureWarner =
+    optional <|
+        concat
+            [ minBound PressureBoundWarning 85
+            , maxBound PressureBoundWarning 110
+            ]
+
+
+type FormWarning
+    = TemperatureWarning TemperatureWarning
+    | PressureWarning PressureWarning
+
+
+formWarner : Validator Model FormWarning
+formWarner =
+    concat
+        [ liftMap TemperatureWarning .temperature temperatureWarner
+        , liftMap PressureWarning .pressure pressureWarner
+        ]
+
+
+displayFormWarning : FormWarning -> String
+displayFormWarning warning =
+    case warning of
+        TemperatureWarning TemperatureBoundWarning ->
+            "Temperature is usually between -95 and 65°C."
+
+        PressureWarning PressureBoundWarning ->
+            "Pressure is usually between 85 and 110 kPa."
+
+
+warningList : Model -> List FormWarning
+warningList model =
+    errors formWarner model
+
+
+warningStringList : Model -> List String
+warningStringList model =
+    List.map displayFormWarning <| warningList model
+
+
+noWarnings : Model -> Bool
+noWarnings model =
+    warningList model |> List.isEmpty
 
 
 
@@ -164,6 +258,7 @@ type Msg
     | InputHumid String
     | InputPress String
     | ClickSubmit
+    | Checkbox Bool
 
 
 commaToFloat : String -> Maybe Float
@@ -171,11 +266,6 @@ commaToFloat str =
     str
         |> String.replace "," "."
         |> String.toFloat
-
-
-noErrors : Model -> Bool
-noErrors model =
-    errorList model |> List.isEmpty
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -209,26 +299,47 @@ update msg model =
             )
 
         ClickSubmit ->
-            if noErrors model then
-                ( model, Cmd.none )
-            else
-                ( { model
-                    | recentError = True
-                  }
-                , Cmd.none
+            case
+                ( noErrors model
+                , noWarnings model || model.ignoreWarnings
                 )
+            of
+                ( True, True ) ->
+                    ( model, Cmd.none )
+
+                _ ->
+                    ( { model
+                        | recentError = True
+                      }
+                    , Cmd.none
+                    )
+
+        Checkbox bool ->
+            ( { model
+                | ignoreWarnings = bool
+              }
+            , Cmd.none
+            )
 
 
 
 ---- COLORS ----
 
 
-dangerRed =
+textRed =
     rgb 0.8 0.1 0.1
 
 
 lightRed =
-    rgb 1 0.7 0.7
+    rgb 1 0.65 0.65
+
+
+textYellow =
+    rgb 0.8 0.7 0
+
+
+yellow =
+    rgb 1 0.95 0.15
 
 
 makeGrey number =
@@ -270,7 +381,7 @@ buttonStyle =
 ---- VIEW ----
 
 
-inputField : Input err -> Model -> Element Msg
+inputField : Input err warn -> Model -> Element Msg
 inputField input model =
     let
         style =
@@ -278,17 +389,30 @@ inputField input model =
                 valid =
                     isValid input.validator <| input.accessor model
 
+                warning =
+                    not <| isValid input.warner <| input.accessor model
+
                 borderColor =
-                    if valid then
-                        grey
-                    else
-                        lightRed
+                    case ( valid, warning ) of
+                        ( False, _ ) ->
+                            lightRed
+
+                        ( _, True ) ->
+                            yellow
+
+                        _ ->
+                            grey
 
                 borderWidth =
-                    if not valid && model.recentError then
-                        3
-                    else
-                        1
+                    case ( valid, warning, model.recentError ) of
+                        ( False, _, True ) ->
+                            3
+
+                        ( _, True, True ) ->
+                            3
+
+                        _ ->
+                            1
             in
                 [ width <| px 200
                 , Border.color borderColor
@@ -304,33 +428,46 @@ inputField input model =
             }
 
 
-errorList : Model -> List FormError
-errorList model =
-    errors formValidator model
-
-
-errorStringList : Model -> List String
-errorStringList model =
-    List.map displayFormError <| errorList model
-
-
-displayErrors : Model -> Element msg
-displayErrors model =
+display : Model -> Color -> (Model -> List String) -> Element msg
+display model color listFunc =
     let
-        errorDisplay =
+        show =
             column
-                [ Font.color dangerRed
+                [ Font.color color
                 , Font.alignLeft
                 , spacing 5
                 ]
             <|
                 List.map text <|
-                    errorStringList model
+                    listFunc model
     in
         if model.recentError then
-            errorDisplay
+            show
         else
             none
+
+
+displayErrors : Model -> Element msg
+displayErrors model =
+    display model textRed errorStringList
+
+
+displayWarnings : Model -> Element msg
+displayWarnings model =
+    display model textYellow warningStringList
+
+
+ignoreWarningsCheckbox : Model -> Element Msg
+ignoreWarningsCheckbox model =
+    if noWarnings model then
+        none
+    else
+        Input.checkbox []
+            { onChange = \x -> Checkbox x
+            , icon = Input.defaultCheckbox
+            , checked = model.ignoreWarnings
+            , label = Input.labelRight [] <| text "Ignore warnings"
+            }
 
 
 myButton : String -> Msg -> Element Msg
@@ -370,7 +507,9 @@ view model =
             , inputField humidity model
             , inputField pressure model
             , myButton "Submit" ClickSubmit
+            , ignoreWarningsCheckbox model
             , displayErrors model
+            , displayWarnings model
             ]
 
 
