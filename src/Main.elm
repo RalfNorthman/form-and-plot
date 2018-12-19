@@ -228,7 +228,7 @@ dangerRed =
 
 
 lightRed =
-    rgb 1 0.5 0.5
+    rgb 1 0.7 0.7
 
 
 makeGrey number =
