@@ -21,7 +21,7 @@ type alias Model =
     , inTemp : String
     , inHumid : String
     , inPress : String
-    , recentError : Bool
+    , recentTrouble : Bool
     , ignoreWarnings : Bool
     }
 
@@ -32,8 +32,8 @@ init =
 
 
 type alias Input err warn =
-    { accessor : Model -> Maybe Float
-    , stringAcc : Model -> String
+    { getFloat : Model -> Maybe Float
+    , getString : Model -> String
     , validator : Validator (Maybe Float) err
     , warner : Validator (Maybe Float) warn
     , label : String
@@ -249,6 +249,11 @@ noWarnings model =
     warningList model |> List.isEmpty
 
 
+areWarnings : Model -> Bool
+areWarnings model =
+    not <| noWarnings model
+
+
 
 ---- UPDATE ----
 
@@ -275,7 +280,7 @@ update msg model =
             ( { model
                 | inTemp = str
                 , temperature = commaToFloat str
-                , recentError = False
+                , recentTrouble = False
               }
             , Cmd.none
             )
@@ -284,7 +289,7 @@ update msg model =
             ( { model
                 | inHumid = str
                 , humidity = commaToFloat str
-                , recentError = False
+                , recentTrouble = False
               }
             , Cmd.none
             )
@@ -293,7 +298,7 @@ update msg model =
             ( { model
                 | inPress = str
                 , pressure = commaToFloat str
-                , recentError = False
+                , recentTrouble = False
               }
             , Cmd.none
             )
@@ -309,7 +314,7 @@ update msg model =
 
                 _ ->
                     ( { model
-                        | recentError = True
+                        | recentTrouble = True
                       }
                     , Cmd.none
                     )
@@ -387,13 +392,17 @@ inputField input model =
         style =
             let
                 valid =
-                    isValid input.validator <| input.accessor model
+                    isValid input.validator <| input.getFloat model
 
-                warning =
-                    not <| isValid input.warner <| input.accessor model
+                warn =
+                    (not <|
+                        isValid input.warner <|
+                            input.getFloat model
+                    )
+                        && not model.ignoreWarnings
 
                 borderColor =
-                    case ( valid, warning ) of
+                    case ( valid, warn ) of
                         ( False, _ ) ->
                             lightRed
 
@@ -404,7 +413,7 @@ inputField input model =
                             grey
 
                 borderWidth =
-                    case ( valid, warning, model.recentError ) of
+                    case ( valid, warn, model.recentTrouble ) of
                         ( False, _, True ) ->
                             3
 
@@ -422,16 +431,21 @@ inputField input model =
         Input.text
             style
             { onChange = (\x -> input.msg x)
-            , text = input.stringAcc model
+            , text = input.getString model
             , placeholder = Nothing
             , label = Input.labelAbove [ alignLeft ] <| text input.label
             }
 
 
-display : Model -> Color -> (Model -> List String) -> Element msg
-display model color listFunc =
+display :
+    Model
+    -> Color
+    -> (Model -> List String)
+    -> Bool
+    -> Element msg
+display model color listFunc showing =
     let
-        show =
+        notifications =
             column
                 [ Font.color color
                 , Font.alignLeft
@@ -441,33 +455,39 @@ display model color listFunc =
                 List.map text <|
                     listFunc model
     in
-        if model.recentError then
-            show
+        if showing then
+            notifications
         else
             none
 
 
 displayErrors : Model -> Element msg
 displayErrors model =
-    display model textRed errorStringList
+    display model textRed errorStringList model.recentTrouble
 
 
 displayWarnings : Model -> Element msg
 displayWarnings model =
-    display model textYellow warningStringList
+    display model textYellow warningStringList <|
+        model.recentTrouble
+            && (not model.ignoreWarnings)
 
 
 ignoreWarningsCheckbox : Model -> Element Msg
 ignoreWarningsCheckbox model =
-    if noWarnings model then
-        none
-    else
+    if
+        noErrors model
+            && model.recentTrouble
+            && areWarnings model
+    then
         Input.checkbox []
             { onChange = \x -> Checkbox x
             , icon = Input.defaultCheckbox
             , checked = model.ignoreWarnings
             , label = Input.labelRight [] <| text "Ignore warnings"
             }
+    else
+        none
 
 
 myButton : String -> Msg -> Element Msg
