@@ -30,6 +30,45 @@ init =
     ( Model Nothing Nothing Nothing "" "" "" False, Cmd.none )
 
 
+type alias Input err =
+    { accessor : Model -> Maybe Float
+    , stringAcc : Model -> String
+    , validator : Validator (Maybe Float) err
+    , label : String
+    , msg : String -> Msg
+    }
+
+
+temperature : Input TemperatureError
+temperature =
+    Input
+        .temperature
+        .inTemp
+        temperatureValidator
+        "Temperature [°C]"
+        InputTemp
+
+
+humidity : Input HumidityError
+humidity =
+    Input
+        .humidity
+        .inHumid
+        humidityValidator
+        "Humidity [%]"
+        InputHumid
+
+
+pressure : Input PressureError
+pressure =
+    Input
+        .pressure
+        .inPress
+        pressureValidator
+        "Pressure [kPa]"
+        InputPress
+
+
 
 ---- VALIDATE ----
 
@@ -188,6 +227,10 @@ dangerRed =
     rgb 0.8 0.1 0.1
 
 
+lightRed =
+    rgb 1 0.5 0.5
+
+
 makeGrey number =
     rgb number number number
 
@@ -227,15 +270,38 @@ buttonStyle =
 ---- VIEW ----
 
 
-inputField : String -> String -> (String -> msg) -> Element msg
-inputField modelPart label msg =
-    Input.text
-        [ width <| px 200 ]
-        { onChange = (\x -> msg x)
-        , text = modelPart
-        , placeholder = Nothing
-        , label = Input.labelAbove [ alignLeft ] <| text label
-        }
+inputField : Input err -> Model -> Element Msg
+inputField input model =
+    let
+        style =
+            let
+                valid =
+                    isValid input.validator <| input.accessor model
+
+                borderColor =
+                    if valid then
+                        grey
+                    else
+                        lightRed
+
+                borderWidth =
+                    if not valid && model.recentError then
+                        3
+                    else
+                        1
+            in
+                [ width <| px 200
+                , Border.color borderColor
+                , Border.width borderWidth
+                ]
+    in
+        Input.text
+            style
+            { onChange = (\x -> input.msg x)
+            , text = input.stringAcc model
+            , placeholder = Nothing
+            , label = Input.labelAbove [ alignLeft ] <| text input.label
+            }
 
 
 errorList : Model -> List FormError
@@ -300,9 +366,9 @@ view model =
             , width <| px 300
             ]
             [ text "Your Elm App is working!"
-            , inputField model.inTemp "Temperature [°C]" InputTemp
-            , inputField model.inHumid "Humidity [%]" InputHumid
-            , inputField model.inPress "Pressure [kPa]" InputPress
+            , inputField temperature model
+            , inputField humidity model
+            , inputField pressure model
             , myButton "Submit" ClickSubmit
             , displayErrors model
             ]
