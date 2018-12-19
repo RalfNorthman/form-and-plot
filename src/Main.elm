@@ -382,6 +382,17 @@ buttonStyle =
     ]
 
 
+inactiveButtonStyle : List (Attribute Msg)
+inactiveButtonStyle =
+    [ Background.color lightGrey
+    , Border.rounded 5
+    , Border.width 2
+    , Border.color darkGrey
+    , padding 10
+    , alpha 0.4
+    ]
+
+
 
 ---- VIEW ----
 
@@ -395,11 +406,7 @@ inputField input model =
                     isValid input.validator <| input.getFloat model
 
                 warn =
-                    (not <|
-                        isValid input.warner <|
-                            input.getFloat model
-                    )
-                        && not model.ignoreWarnings
+                    not <| isValid input.warner <| input.getFloat model
 
                 borderColor =
                     case ( valid, warn ) of
@@ -470,33 +477,40 @@ displayWarnings : Model -> Element msg
 displayWarnings model =
     display model textYellow warningStringList <|
         model.recentTrouble
-            && (not model.ignoreWarnings)
 
 
 ignoreWarningsCheckbox : Model -> Element Msg
 ignoreWarningsCheckbox model =
     if
-        noErrors model
-            && model.recentTrouble
-            && areWarnings model
+        model.ignoreWarnings
+            || (noErrors model
+                    && model.recentTrouble
+                    && areWarnings model
+               )
     then
         Input.checkbox []
             { onChange = \x -> Checkbox x
             , icon = Input.defaultCheckbox
             , checked = model.ignoreWarnings
-            , label = Input.labelRight [] <| text "Ignore warnings"
+            , label = Input.labelRight [] <| text "Submit despite warnings"
             }
     else
         none
 
 
-myButton : String -> Msg -> Element Msg
-myButton label msg =
-    Input.button
-        buttonStyle
-        { onPress = Just msg
-        , label = text label
-        }
+myButton : String -> Msg -> Model -> Element Msg
+myButton label msg model =
+    if
+        model.recentTrouble
+            && not (model.ignoreWarnings && noErrors model)
+    then
+        el inactiveButtonStyle <| text label
+    else
+        Input.button
+            buttonStyle
+            { onPress = Just msg
+            , label = text label
+            }
 
 
 myLayout : Element msg -> Html msg
@@ -526,10 +540,10 @@ view model =
             , inputField temperature model
             , inputField humidity model
             , inputField pressure model
-            , myButton "Submit" ClickSubmit
-            , ignoreWarningsCheckbox model
+            , myButton "Submit" ClickSubmit model
             , displayErrors model
             , displayWarnings model
+            , ignoreWarningsCheckbox model
             ]
 
 
