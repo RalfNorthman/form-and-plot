@@ -21,14 +21,20 @@ type alias Model =
     , inTemp : String
     , inHumid : String
     , inPress : String
-    , recentTrouble : Bool
     , ignoreWarnings : Bool
+    , state : State
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( Model Nothing Nothing Nothing "" "" "" False False, Cmd.none )
+    ( Model Nothing Nothing Nothing "" "" "" False Clear, Cmd.none )
+
+
+type State
+    = RecentError
+    | RecentWarning
+    | Clear
 
 
 type alias Input err warn =
@@ -280,7 +286,7 @@ update msg model =
             ( { model
                 | inTemp = str
                 , temperature = commaToFloat str
-                , recentTrouble = False
+                , state = Clear
               }
             , Cmd.none
             )
@@ -289,7 +295,7 @@ update msg model =
             ( { model
                 | inHumid = str
                 , humidity = commaToFloat str
-                , recentTrouble = False
+                , state = Clear
               }
             , Cmd.none
             )
@@ -298,7 +304,7 @@ update msg model =
             ( { model
                 | inPress = str
                 , pressure = commaToFloat str
-                , recentTrouble = False
+                , state = Clear
               }
             , Cmd.none
             )
@@ -306,15 +312,28 @@ update msg model =
         ClickSubmit ->
             case
                 ( noErrors model
-                , noWarnings model || model.ignoreWarnings
+                , noWarnings model
+                , model.ignoreWarnings
                 )
             of
-                ( True, True ) ->
+                -- send to db
+                ( True, True, _ ) ->
                     ( model, Cmd.none )
+
+                -- send to db
+                ( True, _, True ) ->
+                    ( model, Cmd.none )
+
+                ( False, _, _ ) ->
+                    ( { model
+                        | state = RecentError
+                      }
+                    , Cmd.none
+                    )
 
                 _ ->
                     ( { model
-                        | recentTrouble = True
+                        | state = RecentWarning
                       }
                     , Cmd.none
                     )
@@ -402,15 +421,15 @@ inputField input model =
     let
         style =
             let
-                valid =
-                    isValid input.validator <| input.getFloat model
+                error =
+                    not <| isValid input.validator <| input.getFloat model
 
                 warn =
                     not <| isValid input.warner <| input.getFloat model
 
                 borderColor =
-                    case ( valid, warn ) of
-                        ( False, _ ) ->
+                    case ( error, warn ) of
+                        ( True, _ ) ->
                             lightRed
 
                         ( _, True ) ->
@@ -420,15 +439,15 @@ inputField input model =
                             grey
 
                 borderWidth =
-                    case ( valid, warn, model.recentTrouble ) of
-                        ( False, _, True ) ->
-                            3
+                    case ( model.state, error || warn ) of
+                        ( Clear, _ ) ->
+                            1
 
-                        ( _, True, True ) ->
-                            3
+                        ( _, False ) ->
+                            1
 
                         _ ->
-                            1
+                            3
             in
                 [ width <| px 200
                 , Border.color borderColor
@@ -445,14 +464,13 @@ inputField input model =
 
 
 display :
-    Model
-    -> Color
+    Color
     -> (Model -> List String)
-    -> Bool
+    -> Model
     -> Element msg
-display model color listFunc showing =
+display color listFunc model =
     let
-        notifications =
+        element =
             column
                 [ Font.color color
                 , Font.alignLeft
@@ -462,55 +480,72 @@ display model color listFunc showing =
                 List.map text <|
                     listFunc model
     in
-        if showing then
-            notifications
-        else
+        if model.state == Clear then
             none
+        else
+            element
 
 
 displayErrors : Model -> Element msg
-displayErrors model =
-    display model textRed errorStringList model.recentTrouble
+displayErrors =
+    display
+        textRed
+        errorStringList
 
 
 displayWarnings : Model -> Element msg
-displayWarnings model =
-    display model textYellow warningStringList <|
-        model.recentTrouble
+displayWarnings =
+    display
+        textYellow
+        warningStringList
 
 
 ignoreWarningsCheckbox : Model -> Element Msg
 ignoreWarningsCheckbox model =
-    if
-        model.ignoreWarnings
-            || (noErrors model
-                    && model.recentTrouble
-                    && areWarnings model
-               )
-    then
-        Input.checkbox []
-            { onChange = \x -> Checkbox x
-            , icon = Input.defaultCheckbox
-            , checked = model.ignoreWarnings
-            , label = Input.labelRight [] <| text "Submit despite warnings"
-            }
-    else
-        none
+    let
+        checkbox =
+            Input.checkbox []
+                { onChange = \x -> Checkbox x
+                , icon = Input.defaultCheckbox
+                , checked = model.ignoreWarnings
+                , label =
+                    Input.labelRight [] <|
+                        text "Submit despite warnings"
+                }
+    in
+        case ( model.state, model.ignoreWarnings ) of
+            ( RecentWarning, _ ) ->
+                checkbox
+
+            ( _, True ) ->
+                checkbox
+
+            _ ->
+                none
 
 
 myButton : String -> Msg -> Model -> Element Msg
 myButton label msg model =
-    if
-        model.recentTrouble
-            && not (model.ignoreWarnings && noErrors model)
-    then
-        el inactiveButtonStyle <| text label
-    else
-        Input.button
-            buttonStyle
-            { onPress = Just msg
-            , label = text label
-            }
+    let
+        inactiveButton =
+            el inactiveButtonStyle <| text label
+
+        button =
+            Input.button
+                buttonStyle
+                { onPress = Just msg
+                , label = text label
+                }
+    in
+        case ( model.state, model.ignoreWarnings ) of
+            ( Clear, _ ) ->
+                button
+
+            ( RecentWarning, True ) ->
+                button
+
+            _ ->
+                inactiveButton
 
 
 myLayout : Element msg -> Html msg
