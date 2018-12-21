@@ -21,20 +21,35 @@ type alias Model =
     , inTemp : String
     , inHumid : String
     , inPress : String
-    , ignoreWarnings : Bool
-    , state : State
+    , warnings : Warnings
+    , recent : Recent
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( Model Nothing Nothing Nothing "" "" "" False Clear, Cmd.none )
+    ( { temperature = Nothing
+      , humidity = Nothing
+      , pressure = Nothing
+      , inTemp = ""
+      , inHumid = ""
+      , inPress = ""
+      , warnings = HeedWarnings
+      , recent = NoRecent
+      }
+    , Cmd.none
+    )
 
 
-type State
+type Recent
     = RecentError
     | RecentWarning
-    | Clear
+    | NoRecent
+
+
+type Warnings
+    = HeedWarnings
+    | IgnoreWarnings
 
 
 type alias Input err warn =
@@ -173,9 +188,9 @@ errorStringList model =
     List.map displayFormError <| errorList model
 
 
-noErrors : Model -> Bool
-noErrors model =
-    errorList model |> List.isEmpty
+areErrors : Model -> Bool
+areErrors model =
+    not <| List.isEmpty <| errorList model
 
 
 
@@ -250,18 +265,29 @@ warningStringList model =
     List.map displayFormWarning <| warningList model
 
 
-noWarnings : Model -> Bool
-noWarnings model =
-    warningList model |> List.isEmpty
-
-
 areWarnings : Model -> Bool
 areWarnings model =
-    not <| noWarnings model
+    not <| List.isEmpty <| warningList model
 
 
 
 ---- UPDATE ----
+
+
+type SubmitStatus
+    = Errors
+    | Warnings
+    | Fine
+
+
+submitStatus : Model -> SubmitStatus
+submitStatus model =
+    if areErrors model then
+        Errors
+    else if areWarnings model then
+        Warnings
+    else
+        Fine
 
 
 type Msg
@@ -272,8 +298,8 @@ type Msg
     | Checkbox Bool
 
 
-commaToFloat : String -> Maybe Float
-commaToFloat str =
+convert : String -> Maybe Float
+convert str =
     str
         |> String.replace "," "."
         |> String.toFloat
@@ -285,8 +311,8 @@ update msg model =
         InputTemp str ->
             ( { model
                 | inTemp = str
-                , temperature = commaToFloat str
-                , state = Clear
+                , temperature = convert str
+                , recent = NoRecent
               }
             , Cmd.none
             )
@@ -294,8 +320,8 @@ update msg model =
         InputHumid str ->
             ( { model
                 | inHumid = str
-                , humidity = commaToFloat str
-                , state = Clear
+                , humidity = convert str
+                , recent = NoRecent
               }
             , Cmd.none
             )
@@ -303,44 +329,47 @@ update msg model =
         InputPress str ->
             ( { model
                 | inPress = str
-                , pressure = commaToFloat str
-                , state = Clear
+                , pressure = convert str
+                , recent = NoRecent
               }
             , Cmd.none
             )
 
         ClickSubmit ->
             case
-                ( noErrors model
-                , noWarnings model
-                , model.ignoreWarnings
+                ( submitStatus model
+                , model.warnings
                 )
             of
                 -- send to db
-                ( True, True, _ ) ->
+                ( Fine, _ ) ->
                     ( model, Cmd.none )
 
                 -- send to db
-                ( True, _, True ) ->
+                ( Warnings, IgnoreWarnings ) ->
                     ( model, Cmd.none )
 
-                ( False, _, _ ) ->
+                ( Errors, _ ) ->
                     ( { model
-                        | state = RecentError
+                        | recent = RecentError
                       }
                     , Cmd.none
                     )
 
-                _ ->
+                ( Warnings, HeedWarnings ) ->
                     ( { model
-                        | state = RecentWarning
+                        | recent = RecentWarning
                       }
                     , Cmd.none
                     )
 
         Checkbox bool ->
             ( { model
-                | ignoreWarnings = bool
+                | warnings =
+                    if bool then
+                        IgnoreWarnings
+                    else
+                        HeedWarnings
               }
             , Cmd.none
             )
@@ -439,8 +468,8 @@ inputField input model =
                             grey
 
                 borderWidth =
-                    case ( model.state, error || warn ) of
-                        ( Clear, _ ) ->
+                    case ( model.recent, error || warn ) of
+                        ( NoRecent, _ ) ->
                             1
 
                         ( _, False ) ->
@@ -480,7 +509,7 @@ display color listFunc model =
                 List.map text <|
                     listFunc model
     in
-        if model.state == Clear then
+        if model.recent == NoRecent then
             none
         else
             element
@@ -507,17 +536,21 @@ ignoreWarningsCheckbox model =
             Input.checkbox []
                 { onChange = \x -> Checkbox x
                 , icon = Input.defaultCheckbox
-                , checked = model.ignoreWarnings
+                , checked =
+                    if model.warnings == IgnoreWarnings then
+                        True
+                    else
+                        False
                 , label =
                     Input.labelRight [] <|
                         text "Submit despite warnings"
                 }
     in
-        case ( model.state, model.ignoreWarnings ) of
+        case ( model.recent, model.warnings ) of
             ( RecentWarning, _ ) ->
                 checkbox
 
-            ( _, True ) ->
+            ( _, IgnoreWarnings ) ->
                 checkbox
 
             _ ->
@@ -537,11 +570,11 @@ myButton label msg model =
                 , label = text label
                 }
     in
-        case ( model.state, model.ignoreWarnings ) of
-            ( Clear, _ ) ->
+        case ( model.recent, model.warnings ) of
+            ( NoRecent, _ ) ->
                 button
 
-            ( RecentWarning, True ) ->
+            ( RecentWarning, IgnoreWarnings ) ->
                 button
 
             _ ->
