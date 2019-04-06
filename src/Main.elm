@@ -9,6 +9,30 @@ import Element.Font as Font
 import Element.Input as Input
 import Html exposing (Html)
 import Validator exposing (..)
+import Json.Decode exposing (Decoder, field, map5, int, float, string, nullable)
+
+
+---- JSON ----
+
+
+decode : Decoder Measurement
+decode =
+    map5 Measurement
+        (field "id" int)
+        (field "temperature" float)
+        (field "humidity" float)
+        (field "pressure" float)
+        (field "comment" string)
+
+
+type alias Measurement =
+    { id : Int
+    , temperature : Float
+    , humidity : Float
+    , pressure : Float
+    , comment : String
+    }
+
 
 
 ---- MODEL ----
