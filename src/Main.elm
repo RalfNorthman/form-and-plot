@@ -170,7 +170,7 @@ temperature =
         .inTemp
         temperatureValidator
         temperatureWarner
-        "Temperature [°C]"
+        "Temperature [°C]:"
         InputTemp
 
 
@@ -181,7 +181,7 @@ humidity =
         .inHumid
         humidityValidator
         humidityWarner
-        "Humidity [%]"
+        "Humidity [%]:"
         InputHumid
 
 
@@ -192,7 +192,7 @@ pressure =
         .inPress
         pressureValidator
         pressureWarner
-        "Pressure [kPa]"
+        "Pressure [kPa]:"
         InputPress
 
 
@@ -639,6 +639,7 @@ inputField input model =
                 [ width <| px 200
                 , Border.color borderColor
                 , Border.width borderWidth
+                , Border.rounded 5
                 ]
     in
         Input.text
@@ -657,14 +658,18 @@ display :
     -> Element msg
 display color listFunc model =
     let
+        myText str =
+            paragraph [] <| [ text str ]
+
         element =
-            column
+            textColumn
                 [ Font.color color
                 , Font.alignLeft
-                , spacing 5
+                , width shrink
+                , spacing 10
                 ]
             <|
-                List.map text <|
+                List.map myText <|
                     listFunc model
     in
         if model.recent == NoRecent then
@@ -757,26 +762,8 @@ myLayout element =
                 }
             ]
         }
-        [ padding 10 ]
+        [ padding 20 ]
         element
-
-
-inputs : Model -> Element Msg
-inputs model =
-    column
-        [ spacing 10
-        , padding 10
-        , width <| px 300
-        ]
-        [ inputField temperature model
-        , inputField humidity model
-        , inputField pressure model
-        , commentInput model
-        , myButton "Submit" ClickSubmit model
-        , displayErrors model
-        , displayWarnings model
-        , ignoreWarningsCheckbox model
-        ]
 
 
 commentInput : Model -> Element Msg
@@ -785,6 +772,7 @@ commentInput model =
         [ width <| px 200
         , Border.color grey
         , Border.width 1
+        , Border.rounded 5
         ]
         { onChange = (\x -> InputComment x)
         , text = model.inComment
@@ -805,16 +793,48 @@ measurementCard item =
         ]
 
 
+inputs : Model -> Element Msg
+inputs model =
+    column
+        [ spacing 10
+        , padding 10
+        , width <| px 300
+        , alignTop
+        , Border.color lightGrey
+        , Border.width 1
+        ]
+        [ inputField temperature model
+        , inputField humidity model
+        , inputField pressure model
+        , commentInput model
+        , myButton "Submit" ClickSubmit model
+        , displayErrors model
+        , displayWarnings model
+        , ignoreWarningsCheckbox model
+        ]
+
+
 results : Model -> Element Msg
 results model =
-    column [ spacing 5 ] <|
+    column
+        [ spacing 5
+        , alignRight
+        , alignTop
+        , width fill
+        , clip
+        , padding 10
+        ]
+    <|
         List.map measurementCard model.measurements
 
 
 view : Model -> Html Msg
 view model =
     myLayout <|
-        row [ spacing 50 ]
+        row
+            [ spacing 20
+            , width fill
+            ]
             [ inputs model
             , results model
             ]
