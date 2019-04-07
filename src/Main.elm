@@ -690,10 +690,17 @@ displayWarnings =
 ignoreWarningsCheckbox : Model -> Element Msg
 ignoreWarningsCheckbox model =
     let
+        myIcon : Bool -> Element Msg
+        myIcon checked =
+            if checked then
+                text "☑"
+            else
+                text "☐"
+
         checkbox =
             Input.checkbox []
                 { onChange = \x -> Checkbox x
-                , icon = Input.defaultCheckbox
+                , icon = myIcon
                 , checked =
                     if model.warnings == IgnoreWarnings then
                         True
@@ -701,7 +708,7 @@ ignoreWarningsCheckbox model =
                         False
                 , label =
                     Input.labelRight [] <|
-                        text "Submit despite warnings"
+                        text "Ignore warnings"
                 }
     in
         case ( model.recent, model.warnings ) of
@@ -750,7 +757,7 @@ myLayout element =
                 }
             ]
         }
-        []
+        [ padding 10 ]
         element
 
 
@@ -788,7 +795,14 @@ commentInput model =
 
 measurementCard : Measurement -> Element Msg
 measurementCard item =
-    el [] <| text item.comment
+    row
+        [ spacing 15
+        ]
+        [ text <| String.fromFloat item.temperature
+        , text <| String.fromFloat item.humidity
+        , text <| String.fromFloat item.pressure
+        , text item.comment
+        ]
 
 
 results : Model -> Element Msg
