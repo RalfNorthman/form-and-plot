@@ -15,6 +15,26 @@ import Http
 import HttpBuilder exposing (..)
 
 
+---- FONT ----
+
+
+googleFont : String -> Attribute Msg
+googleFont fontName =
+    let
+        fontString =
+            String.replace " " "+" fontName
+    in
+        Font.family
+            [ Font.external
+                { url =
+                    "https://fonts.googleapis.com/css?family="
+                        ++ fontString
+                , name = fontName
+                }
+            ]
+
+
+
 ---- JSON ----
 
 
@@ -569,6 +589,10 @@ darkGrey =
     makeGrey 0.7
 
 
+white =
+    makeGrey 1
+
+
 
 ---- VIEW  HELPERS ----
 
@@ -751,8 +775,8 @@ myButton label msg model =
                 inactiveButton
 
 
-myLayout : Element msg -> Html msg
-myLayout element =
+myLayout : List (Attribute msg) -> Element msg -> Html msg
+myLayout attributes element =
     layoutWith
         { options =
             [ focusStyle
@@ -762,7 +786,7 @@ myLayout element =
                 }
             ]
         }
-        [ padding 20 ]
+        attributes
         element
 
 
@@ -796,12 +820,13 @@ measurementCard item =
 inputs : Model -> Element Msg
 inputs model =
     column
-        [ spacing 10
+        [ spacing 20
         , padding 10
         , width <| px 300
         , alignTop
         , Border.color lightGrey
         , Border.width 1
+        , Border.rounded 5
         ]
         [ inputField temperature model
         , inputField humidity model
@@ -821,22 +846,46 @@ results model =
         , alignRight
         , alignTop
         , width fill
-        , clip
         , padding 10
         ]
     <|
         List.map measurementCard model.measurements
 
 
+sillyTitle : Element Msg
+sillyTitle =
+    el
+        [ Font.size 64
+        , width fill
+        , googleFont "Dokdo"
+        , Background.color grey
+        , Font.color white
+        , padding 5
+        , Border.rounded 20
+        ]
+    <|
+        text "Form Input Stuff!"
+
+
 view : Model -> Html Msg
 view model =
-    myLayout <|
-        row
-            [ spacing 20
-            , width fill
+    myLayout
+        [ padding 20
+        , googleFont "Montserrat"
+        ]
+    <|
+        column
+            [ width fill
+            , spacing 20
             ]
-            [ inputs model
-            , results model
+            [ sillyTitle
+            , row
+                [ spacing 20
+                , width fill
+                ]
+                [ inputs model
+                , results model
+                ]
             ]
 
 
