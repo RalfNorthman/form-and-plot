@@ -9,27 +9,13 @@ import Element.Font as Font
 import Element.Input as Input
 import Html exposing (Html)
 import Validator exposing (..)
-import Json.Decode exposing (Decoder, list, field, map5, int, float, string, nullable)
+import Json.Decode as D exposing (Decoder)
+import Json.Encode as E exposing (Value)
 import Http
 import HttpBuilder exposing (..)
 
 
 ---- JSON ----
-
-
-decodeMeasurement : Decoder Measurement
-decodeMeasurement =
-    map5 Measurement
-        (field "id" int)
-        (field "temperature" float)
-        (field "humidity" float)
-        (field "pressure" float)
-        (field "comment" string)
-
-
-decodeMeasurementList : Decoder (List Measurement)
-decodeMeasurementList =
-    list decodeMeasurement
 
 
 type alias Measurement =
@@ -39,6 +25,39 @@ type alias Measurement =
     , pressure : Float
     , comment : String
     }
+
+
+decodeMeasurement : Decoder Measurement
+decodeMeasurement =
+    D.map5 Measurement
+        (D.field "id" D.int)
+        (D.field "temperature" D.float)
+        (D.field "humidity" D.float)
+        (D.field "pressure" D.float)
+        (D.field "comment" D.string)
+
+
+decodeMeasurementList : Decoder (List Measurement)
+decodeMeasurementList =
+    D.list decodeMeasurement
+
+
+type alias NewMeasurement =
+    { temperature : Float
+    , humidity : Float
+    , pressure : Float
+    , comment : String
+    }
+
+
+encodeNewMeasurement : NewMeasurement -> Value
+encodeNewMeasurement item =
+    E.object
+        [ ( "temperature", E.float item.temperature )
+        , ( "humidity", E.float item.humidity )
+        , ( "pressure", E.float item.pressure )
+        , ( "comment", E.string item.comment )
+        ]
 
 
 
@@ -60,6 +79,23 @@ requestAllHandler result =
 
         Err error ->
             RequestAllError error
+
+
+postOne : NewMeasurement -> Cmd Msg
+postOne item =
+    post "http://localhost:8000/measurements"
+        |> withJsonBody (encodeNewMeasurement item)
+        |> send postOneHandler
+
+
+postOneHandler : Result Http.Error () -> Msg
+postOneHandler result =
+    case result of
+        Ok list ->
+            PostSuccesful
+
+        Err error ->
+            PostOneError error
 
 
 
@@ -364,6 +400,8 @@ type Msg
     | Checkbox Bool
     | GotAll (List Measurement)
     | RequestAllError Http.Error
+    | PostSuccesful
+    | PostOneError Http.Error
 
 
 convert : String -> Maybe Float
@@ -412,32 +450,49 @@ update msg model =
             )
 
         ClickSubmit ->
-            case
-                ( submitStatus model
-                , model.warnings
-                )
-            of
-                -- send to db
-                ( Fine, _ ) ->
-                    ( model, Cmd.none )
+            let
+                sendPost =
+                    case
+                        ( model.temperature
+                        , model.humidity
+                        , model.pressure
+                        )
+                    of
+                        ( Just temp, Just humid, Just press ) ->
+                            postOne <|
+                                NewMeasurement
+                                    temp
+                                    humid
+                                    press
+                                    model.inComment
 
-                -- send to db
-                ( Warnings, IgnoreWarnings ) ->
-                    ( model, Cmd.none )
-
-                ( Errors, _ ) ->
-                    ( { model
-                        | recent = RecentError
-                      }
-                    , Cmd.none
+                        _ ->
+                            Cmd.none
+            in
+                case
+                    ( submitStatus model
+                    , model.warnings
                     )
+                of
+                    ( Fine, _ ) ->
+                        ( model, sendPost )
 
-                ( Warnings, HeedWarnings ) ->
-                    ( { model
-                        | recent = RecentWarning
-                      }
-                    , Cmd.none
-                    )
+                    ( Warnings, IgnoreWarnings ) ->
+                        ( model, sendPost )
+
+                    ( Errors, _ ) ->
+                        ( { model
+                            | recent = RecentError
+                          }
+                        , Cmd.none
+                        )
+
+                    ( Warnings, HeedWarnings ) ->
+                        ( { model
+                            | recent = RecentWarning
+                          }
+                        , Cmd.none
+                        )
 
         Checkbox bool ->
             ( { model
@@ -459,6 +514,17 @@ update msg model =
             )
 
         RequestAllError error ->
+            ( { model
+                | measurements = []
+                , requestStatus = Error error
+              }
+            , Cmd.none
+            )
+
+        PostSuccesful ->
+            init
+
+        PostOneError error ->
             ( { model
                 | measurements = []
                 , requestStatus = Error error
