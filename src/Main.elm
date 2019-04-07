@@ -73,6 +73,7 @@ type alias Model =
     , inTemp : String
     , inHumid : String
     , inPress : String
+    , inComment : String
     , warnings : Warnings
     , recent : Recent
     , requestStatus : RequestStatus
@@ -88,6 +89,7 @@ init =
       , inTemp = ""
       , inHumid = ""
       , inPress = ""
+      , inComment = ""
       , warnings = HeedWarnings
       , recent = NoRecent
       , requestStatus = NotMadeYet
@@ -357,6 +359,7 @@ type Msg
     = InputTemp String
     | InputHumid String
     | InputPress String
+    | InputComment String
     | ClickSubmit
     | Checkbox Bool
     | GotAll (List Measurement)
@@ -395,6 +398,14 @@ update msg model =
             ( { model
                 | inPress = str
                 , pressure = convert str
+                , recent = NoRecent
+              }
+            , Cmd.none
+            )
+
+        InputComment str ->
+            ( { model
+                | inComment = str
                 , recent = NoRecent
               }
             , Cmd.none
@@ -687,11 +698,26 @@ inputs model =
         [ inputField temperature model
         , inputField humidity model
         , inputField pressure model
+        , commentInput model
         , myButton "Submit" ClickSubmit model
         , displayErrors model
         , displayWarnings model
         , ignoreWarningsCheckbox model
         ]
+
+
+commentInput : Model -> Element Msg
+commentInput model =
+    Input.text
+        [ width <| px 200
+        , Border.color grey
+        , Border.width 1
+        ]
+        { onChange = (\x -> InputComment x)
+        , text = model.inComment
+        , placeholder = Nothing
+        , label = Input.labelAbove [ alignLeft ] <| text "Comment:"
+        }
 
 
 measurementCard : Measurement -> Element Msg
