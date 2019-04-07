@@ -9,20 +9,27 @@ import Element.Font as Font
 import Element.Input as Input
 import Html exposing (Html)
 import Validator exposing (..)
-import Json.Decode exposing (Decoder, field, map5, int, float, string, nullable)
+import Json.Decode exposing (Decoder, list, field, map5, int, float, string, nullable)
+import Http
+import HttpBuilder exposing (..)
 
 
 ---- JSON ----
 
 
-decode : Decoder Measurement
-decode =
+decodeMeasurement : Decoder Measurement
+decodeMeasurement =
     map5 Measurement
         (field "id" int)
         (field "temperature" float)
         (field "humidity" float)
         (field "pressure" float)
         (field "comment" string)
+
+
+decodeMeasurementList : Decoder (List Measurement)
+decodeMeasurementList =
+    list decodeMeasurement
 
 
 type alias Measurement =
@@ -32,6 +39,27 @@ type alias Measurement =
     , pressure : Float
     , comment : String
     }
+
+
+
+---- HTTP ----
+
+
+getAll : Cmd Msg
+getAll =
+    get "http://localhost:8000/measurements"
+        |> withExpectJson decodeMeasurementList
+        |> send requestAllHandler
+
+
+requestAllHandler : Result Http.Error (List Measurement) -> Msg
+requestAllHandler result =
+    case result of
+        Ok list ->
+            GotAll list
+
+        Err error ->
+            RequestAllError error
 
 
 
@@ -47,6 +75,8 @@ type alias Model =
     , inPress : String
     , warnings : Warnings
     , recent : Recent
+    , requestStatus : RequestStatus
+    , measurements : List Measurement
     }
 
 
@@ -60,9 +90,18 @@ init =
       , inPress = ""
       , warnings = HeedWarnings
       , recent = NoRecent
+      , requestStatus = NotMadeYet
+      , measurements = []
       }
-    , Cmd.none
+    , getAll
     )
+
+
+type RequestStatus
+    = Okay
+    | Error Http.Error
+    | NotMadeYet
+    | NoResponse
 
 
 type Recent
@@ -320,6 +359,8 @@ type Msg
     | InputPress String
     | ClickSubmit
     | Checkbox Bool
+    | GotAll (List Measurement)
+    | RequestAllError Http.Error
 
 
 convert : String -> Maybe Float
@@ -394,6 +435,22 @@ update msg model =
                         IgnoreWarnings
                     else
                         HeedWarnings
+              }
+            , Cmd.none
+            )
+
+        GotAll list ->
+            ( { model
+                | measurements = list
+                , requestStatus = Okay
+              }
+            , Cmd.none
+            )
+
+        RequestAllError error ->
+            ( { model
+                | measurements = []
+                , requestStatus = Error error
               }
             , Cmd.none
             )
@@ -620,22 +677,40 @@ myLayout element =
         element
 
 
+inputs : Model -> Element Msg
+inputs model =
+    column
+        [ spacing 10
+        , padding 10
+        , width <| px 300
+        ]
+        [ inputField temperature model
+        , inputField humidity model
+        , inputField pressure model
+        , myButton "Submit" ClickSubmit model
+        , displayErrors model
+        , displayWarnings model
+        , ignoreWarningsCheckbox model
+        ]
+
+
+measurementCard : Measurement -> Element Msg
+measurementCard item =
+    el [] <| text item.comment
+
+
+results : Model -> Element Msg
+results model =
+    column [ spacing 5 ] <|
+        List.map measurementCard model.measurements
+
+
 view : Model -> Html Msg
 view model =
     myLayout <|
-        column
-            [ spacing 10
-            , padding 10
-            , width <| px 300
-            ]
-            [ text "Your Elm App is working!"
-            , inputField temperature model
-            , inputField humidity model
-            , inputField pressure model
-            , myButton "Submit" ClickSubmit model
-            , displayErrors model
-            , displayWarnings model
-            , ignoreWarningsCheckbox model
+        row [ spacing 50 ]
+            [ inputs model
+            , results model
             ]
 
 
